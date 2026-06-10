@@ -5,6 +5,14 @@ const wardrobeModule = {
 
   async init() {
     this.items = await DB.getAll('clothes');
+    this.filterCat = 'all';
+    this.filterScene = 'all';
+    document.querySelectorAll('#wardrobeCategoryFilter .filter-tag').forEach(t => {
+      t.classList.toggle('active', t.dataset.cat === 'all');
+    });
+    document.querySelectorAll('#wardrobeSceneFilter .scene-tag').forEach(t => {
+      t.classList.toggle('active', t.dataset.scene === 'all');
+    });
     this.render();
   },
 

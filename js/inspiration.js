@@ -1,6 +1,6 @@
 const inspirationModule = {
   items: [],
-  filterStyle: 'all',
+  currentStyleFilter: 'all',
   linkCandidates: {},
 
   async init() {
@@ -11,7 +11,7 @@ const inspirationModule = {
   filterStyle(btn, s) {
     document.querySelectorAll('.inspo-tag').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    this.filterStyle = s;
+    this.currentStyleFilter = s;
     this.render();
   },
 
@@ -216,7 +216,7 @@ const inspirationModule = {
   render() {
     const grid = document.getElementById('inspoMasonry');
     let items = this.items;
-    if (this.filterStyle !== 'all') items = items.filter(i => i.style === this.filterStyle);
+    if (this.currentStyleFilter !== 'all') items = items.filter(i => i.style === this.currentStyleFilter);
     if (items.length === 0) {
       grid.innerHTML = `<div class="empty-state" style="column-span:all;"><div class="empty-icon">✨</div><p>灵感板是空的</p><p class="empty-sub">收集喜欢的穿搭图，打造你的风格参考库</p></div>`;
       return;

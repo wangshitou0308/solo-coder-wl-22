@@ -178,12 +178,18 @@ const bodyModule = {
   },
 
   render() {
+    document.getElementById('currentBMI').textContent = '-';
+    const bcEl = document.getElementById('bmiCategory');
+    bcEl.textContent = '';
+    bcEl.style.color = '';
+    document.getElementById('currentWHR').textContent = '-';
+    document.getElementById('currentSWR').textContent = '-';
+
     const latest = this.records[this.records.length - 1];
     if (latest && latest.height && latest.weight) {
       const bmi = this.calcBMI(latest.height, latest.weight);
       const bc = this.bmiCategory(bmi);
       document.getElementById('currentBMI').textContent = bmi.toFixed(1);
-      const bcEl = document.getElementById('bmiCategory');
       bcEl.textContent = bc.t;
       bcEl.style.color = bc.c;
     }
