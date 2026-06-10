@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f8e6e8">
+<title>型影 · 身材管理与穿搭助手</title>
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">型影</span>
+      </div>
+      <div class="header-title" id="pageTitle">身材档案</div>
+      <div class="header-placeholder"></div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="page page-body active" id="page-body">
+      <div class="page-header-action">
+        <h2 class="page-title">我的身材档案</h2>
+        <button class="btn-primary btn-sm" onclick="bodyModule.showRecordModal()">+ 记录数据</button>
+      </div>
+
+      <div class="stats-card-grid">
+        <div class="stat-card stat-primary">
+          <div class="stat-label">当前 BMI</div>
+          <div class="stat-value" id="currentBMI">--</div>
+          <div class="stat-sub" id="bmiCategory">暂无数据</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">腰臀比</div>
+          <div class="stat-value" id="currentWHR">--</div>
+          <div class="stat-sub">腰臀健康指标</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">肩腰比</div>
+          <div class="stat-value" id="currentSWR">--</div>
+          <div class="stat-sub">身材比例参考</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">体型分类</div>
+          <div class="stat-value" id="bodyType">--</div>
+          <div class="stat-sub" id="bodyTypeDesc">待评估</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>身材轮廓示意</h3>
+        </div>
+        <div class="body-silhouette-wrap">
+          <svg class="body-silhouette" id="bodySilhouette" viewBox="0 0 200 400" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#e8a5b0;stop-opacity:0.8" />
+                <stop offset="100%" style="stop-color:#c9a8d4;stop-opacity:0.8" />
+              </linearGradient>
+            </defs>
+            <ellipse cx="100" cy="35" rx="28" ry="30" fill="url(#bodyGrad)"/>
+            <path d="M72 65 Q68 80 60 95 Q55 110 50 130 L55 150 L58 160 Q55 180 52 200 L50 260 Q52 280 55 300 L60 370 Q62 380 70 380 L90 380 Q95 378 95 370 L95 300 L105 300 L105 370 Q105 378 110 380 L130 380 Q138 380 140 370 L145 300 Q148 280 150 260 L148 200 Q145 180 142 160 L145 150 L150 130 Q145 110 140 95 Q132 80 128 65 Q115 60 100 60 Q85 60 72 65 Z" fill="url(#bodyGrad)"/>
+            <ellipse cx="38" cy="140" rx="12" ry="50" fill="url(#bodyGrad)"/>
+            <ellipse cx="162" cy="140" rx="12" ry="50" fill="url(#bodyGrad)"/>
+            <text class="b-measure" x="180" y="90" id="m-shoulder">-</text>
+            <line class="measure-line" x1="175" y1="85" x2="175" y2="85" id="l-shoulder"/>
+            <text class="b-measure" x="180" y="140" id="m-bust">-</text>
+            <text class="b-measure" x="180" y="200" id="m-waist">-</text>
+            <text class="b-measure" x="180" y="260" id="m-hip">-</text>
+            <text class="b-measure" x="8" y="200" id="m-height">-</text>
+            <text class="b-label" x="100" y="395" text-anchor="middle">身材轮廓示意图</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>维度变化趋势</h3>
+          <div class="trend-tabs">
+            <button class="trend-tab active" data-trend="weight" onclick="bodyModule.switchTrend(this,'weight')">体重</button>
+            <button class="trend-tab" data-trend="bmi" onclick="bodyModule.switchTrend(this,'bmi')">BMI</button>
+            <button class="trend-tab" data-trend="waist" onclick="bodyModule.switchTrend(this,'waist')">腰围</button>
+            <button class="trend-tab" data-trend="hip" onclick="bodyModule.switchTrend(this,'hip')">臀围</button>
+          </div>
+        </div>
+        <canvas id="trendChart" height="220"></canvas>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>历史记录</h3>
+        </div>
+        <div class="record-list" id="bodyRecordList">
+          <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <p>还没有身体数据记录</p>
+            <p class="empty-sub">点击右上角「记录数据」开始追踪身材变化</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page page-wardrobe" id="page-wardrobe">
+      <div class="page-header-action">
+        <h2 class="page-title">我的衣橱</h2>
+        <button class="btn-primary btn-sm" onclick="wardrobeModule.showItemModal()">+ 添加衣物</button>
+      </div>
+
+      <div class="filter-bar">
+        <div class="filter-tags" id="wardrobeCategoryFilter">
+          <button class="filter-tag active" data-cat="all" onclick="wardrobeModule.filterCategory(this,'all')">全部</button>
+          <button class="filter-tag" data-cat="上衣" onclick="wardrobeModule.filterCategory(this,'上衣')">上衣</button>
+          <button class="filter-tag" data-cat="下装" onclick="wardrobeModule.filterCategory(this,'下装')">下装</button>
+          <button class="filter-tag" data-cat="外套" onclick="wardrobeModule.filterCategory(this,'外套')">外套</button>
+          <button class="filter-tag" data-cat="连衣裙" onclick="wardrobeModule.filterCategory(this,'连衣裙')">连衣裙</button>
+          <button class="filter-tag" data-cat="鞋靴" onclick="wardrobeModule.filterCategory(this,'鞋靴')">鞋靴</button>
+          <button class="filter-tag" data-cat="配饰" onclick="wardrobeModule.filterCategory(this,'配饰')">配饰</button>
+        </div>
+        <div class="filter-tags" id="wardrobeSceneFilter" style="margin-top:8px">
+          <button class="scene-tag active" data-scene="all" onclick="wardrobeModule.filterScene(this,'all')">全部场合</button>
+          <button class="scene-tag" data-scene="通勤" onclick="wardrobeModule.filterScene(this,'通勤')">通勤</button>
+          <button class="scene-tag" data-scene="休闲" onclick="wardrobeModule.filterScene(this,'休闲')">休闲</button>
+          <button class="scene-tag" data-scene="运动" onclick="wardrobeModule.filterScene(this,'运动')">运动</button>
+          <button class="scene-tag" data-scene="约会" onclick="wardrobeModule.filterScene(this,'约会')">约会</button>
+          <button class="scene-tag" data-scene="正式" onclick="wardrobeModule.filterScene(this,'正式')">正式</button>
+        </div>
+      </div>
+
+      <div class="wardrobe-warning" id="wardrobeWarning" style="display:none"></div>
+
+      <div class="wardrobe-stats-row">
+        <div class="ws-item"><span class="ws-num" id="wsTotal">0</span><span class="ws-label">总件数</span></div>
+        <div class="ws-item"><span class="ws-num" id="wsValue">¥0</span><span class="ws-label">总价值</span></div>
+        <div class="ws-item"><span class="ws-num" id="wsWorn">0</span><span class="ws-label">本月穿</span></div>
+      </div>
+
+      <div class="wardrobe-grid" id="wardrobeGrid">
+        <div class="empty-state">
+          <div class="empty-icon">👗</div>
+          <p>衣橱还是空的</p>
+          <p class="empty-sub">点击「添加衣物」打造你的数字衣橱</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="page page-outfit" id="page-outfit">
+      <div class="page-header-action">
+        <h2 class="page-title">穿搭日记</h2>
+        <button class="btn-primary btn-sm" onclick="outfitModule.showOutfitModal()">+ 新建穿搭</button>
+      </div>
+
+      <div class="outfit-tabs">
+        <button class="otab active" data-view="calendar" onclick="outfitModule.switchView(this,'calendar')">📅 日历</button>
+        <button class="otab" data-view="list" onclick="outfitModule.switchView(this,'list')">📋 列表</button>
+        <button class="otab" data-view="rank" onclick="outfitModule.switchView(this,'rank')">🏆 排行</button>
+      </div>
+
+      <div class="outfit-view outfit-calendar-view active" id="outfitCalendarView">
+        <div class="calendar-header">
+          <button class="cal-nav" onclick="outfitModule.prevMonth()">‹</button>
+          <div class="cal-title" id="calTitle">2026年6月</div>
+          <button class="cal-nav" onclick="outfitModule.nextMonth()">›</button>
+        </div>
+        <div class="calendar-week">
+          <div class="cw">日</div><div class="cw">一</div><div class="cw">二</div><div class="cw">三</div>
+          <div class="cw">四</div><div class="cw">五</div><div class="cw">六</div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </div>
+
+      <div class="outfit-view outfit-list-view" id="outfitListView">
+        <div class="outfit-list" id="outfitList"></div>
+      </div>
+
+      <div class="outfit-view outfit-rank-view" id="outfitRankView">
+        <div class="rank-section">
+          <h4>🔥 穿着频次 TOP10</h4>
+          <div id="rankFreqList" class="rank-list"></div>
+        </div>
+        <div class="rank-section" style="margin-top:20px">
+          <h4>💰 性价比 TOP10 （单次穿着成本最低）</h4>
+          <div id="rankValueList" class="rank-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page page-recommend" id="page-recommend">
+      <div class="page-header-action">
+        <h2 class="page-title">今日推荐</h2>
+        <button class="btn-ghost btn-sm" onclick="recommendModule.refresh()">🔄 换一批</button>
+      </div>
+
+      <div class="weather-card" id="weatherCard">
+        <div class="weather-main">
+          <div class="weather-icon" id="weatherIcon">☀️</div>
+          <div>
+            <div class="weather-temp" id="weatherTemp">26°C</div>
+            <div class="weather-desc" id="weatherDesc">晴朗 · 微风</div>
+          </div>
+        </div>
+        <div class="weather-meta">
+          <span id="weatherSeason">夏季</span>
+          <span>·</span>
+          <select id="scheduleType" class="schedule-select" onchange="recommendModule.onScheduleChange()">
+            <option value="通勤">通勤日</option>
+            <option value="休闲">休闲时光</option>
+            <option value="约会">约会场合</option>
+            <option value="运动">运动健身</option>
+            <option value="正式">正式场合</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="recommend-tip" id="recommendTip"></div>
+
+      <div class="recommend-list" id="recommendList"></div>
+    </section>
+
+    <section class="page page-shopping" id="page-shopping">
+      <div class="page-header-action">
+        <h2 class="page-title">购物清单</h2>
+        <button class="btn-primary btn-sm" onclick="shoppingModule.showItemModal()">+ 添加意向</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>📊 衣橱分析报告</h3>
+        </div>
+        <div id="analysisPanel">
+          <div class="empty-state small">
+            <div class="empty-icon">🔍</div>
+            <p>添加衣物后自动生成品类分析</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card" style="margin-top:16px">
+        <div class="section-header">
+          <h3>💡 建议采购清单</h3>
+        </div>
+        <div id="suggestList"></div>
+      </div>
+
+      <div class="section-card" style="margin-top:16px">
+        <div class="section-header">
+          <h3>📋 我的意向清单</h3>
+          <div class="budget-total">预算合计：<strong id="budgetTotal">¥0</strong></div>
+        </div>
+        <div id="wishlist"></div>
+      </div>
+    </section>
+
+    <section class="page page-inspiration" id="page-inspiration">
+      <div class="page-header-action">
+        <h2 class="page-title">风格灵感板</h2>
+        <button class="btn-primary btn-sm" onclick="inspirationModule.showAddModal()">+ 收藏灵感</button>
+      </div>
+
+      <div class="inspo-filter">
+        <button class="inspo-tag active" data-style="all" onclick="inspirationModule.filterStyle(this,'all')">全部</button>
+        <button class="inspo-tag" data-style="极简" onclick="inspirationModule.filterStyle(this,'极简')">极简</button>
+        <button class="inspo-tag" data-style="甜美" onclick="inspirationModule.filterStyle(this,'甜美')">甜美</button>
+        <button class="inspo-tag" data-style="复古" onclick="inspirationModule.filterStyle(this,'复古')">复古</button>
+        <button class="inspo-tag" data-style="街头" onclick="inspirationModule.filterStyle(this,'街头')">街头</button>
+        <button class="inspo-tag" data-style="通勤" onclick="inspirationModule.filterStyle(this,'通勤')">通勤</button>
+        <button class="inspo-tag" data-style="度假" onclick="inspirationModule.filterStyle(this,'度假')">度假</button>
+      </div>
+
+      <div class="inspo-masonry" id="inspoMasonry">
+        <div class="empty-state">
+          <div class="empty-icon">✨</div>
+          <p>灵感板是空的</p>
+          <p class="empty-sub">收集喜欢的穿搭图，打造你的风格参考库</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="app-nav">
+    <button class="nav-btn active" data-page="body" onclick="app.switchPage('body')">
+      <span class="nav-icon">👤</span><span class="nav-label">身材</span>
+    </button>
+    <button class="nav-btn" data-page="wardrobe" onclick="app.switchPage('wardrobe')">
+      <span class="nav-icon">👗</span><span class="nav-label">衣橱</span>
+    </button>
+    <button class="nav-btn" data-page="outfit" onclick="app.switchPage('outfit')">
+      <span class="nav-icon">📅</span><span class="nav-label">穿搭</span>
+    </button>
+    <button class="nav-btn" data-page="recommend" onclick="app.switchPage('recommend')">
+      <span class="nav-icon">✨</span><span class="nav-label">推荐</span>
+    </button>
+    <button class="nav-btn" data-page="shopping" onclick="app.switchPage('shopping')">
+      <span class="nav-icon">🛒</span><span class="nav-label">购物</span>
+    </button>
+    <button class="nav-btn" data-page="inspiration" onclick="app.switchPage('inspiration')">
+      <span class="nav-icon">💡</span><span class="nav-label">灵感</span>
+    </button>
+  </nav>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContainer"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="js/db.js?v=3"></script>
+<script src="js/utils.js?v=3"></script>
+<script src="js/body.js?v=3"></script>
+<script src="js/wardrobe.js?v=3"></script>
+<script src="js/outfit.js?v=3"></script>
+<script src="js/recommend.js?v=3"></script>
+<script src="js/shopping.js?v=3"></script>
+<script src="js/inspiration.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
+<link rel="stylesheet" href="css/style.css?v=3">
+</body>
+</html>
