@@ -1,6 +1,6 @@
 const DB = (function() {
   const DB_NAME = 'xingying_db';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORES = {
     bodyRecords: { key: 'id', auto: true, indexes: [['date', 'date', { unique: false }]] },
     clothes: { key: 'id', auto: true, indexes: [

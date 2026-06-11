@@ -44,6 +44,31 @@ const shoppingModule = {
     return map;
   },
 
+  _checkSimilarItems(name, category) {
+    const similar = [];
+    wardrobeModule.items.forEach(it => {
+      if (it.category !== category) return;
+      const n1 = (it.name || '').replace(/\s+/g, '').toLowerCase();
+      const n2 = (name || '').replace(/\s+/g, '').toLowerCase();
+      if (n1 === n2) { similar.push({ item: it, type: '同名' }); return; }
+      if (n1.includes(n2.slice(0, 3)) || n2.includes(n1.slice(0, 3))) {
+        similar.push({ item: it, type: '类似' });
+      }
+      if (it.color && similar.length === 0) {
+        const wardrobeColorCat = Utils.COLORS.find(c => c.name === it.color)?.cat;
+        const inputName = name.toLowerCase();
+        const colorKeywords = ['白色', '黑色', '灰色', '粉色', '蓝色', '红色', '绿色', '卡其', '藏青'];
+        for (const ck of colorKeywords) {
+          if (inputName.includes(ck) && it.color === ck) {
+            similar.push({ item: it, type: '同色同品类' });
+            break;
+          }
+        }
+      }
+    });
+    return similar.slice(0, 3);
+  },
+
   renderAnalysis() {
     const items = wardrobeModule.items;
     const panel = document.getElementById('analysisPanel');
@@ -56,6 +81,27 @@ const shoppingModule = {
     const sceneCount = this._countBy(items, 'scenes');
     const total = items.length;
     const maxCat = Math.max(...Object.values(catCount), 1);
+
+    const basicOwned = this.BASIC_ITEMS.filter(bi => {
+      return items.some(i => {
+        if (i.subCategory === bi.name) return true;
+        if (Utils.getCategoryGroup(bi.category) !== i.category) return false;
+        const ni = i.name.replace(/\s+/g, '');
+        const bn = bi.name.replace(/\s+/g, '');
+        return ni.includes(bn.slice(0, 2)) || bn.includes(ni.slice(0, 2));
+      });
+    }).length;
+    const basicCoverage = Math.round((basicOwned / this.BASIC_ITEMS.length) * 100);
+
+    const uniqueColors = Object.keys(colorCount).length;
+    const colorRichness = Math.round((uniqueColors / Utils.COLORS.length) * 100);
+
+    const idleCount = items.filter(i => wardrobeModule.isIdle(i)).length;
+    const idleRate = Math.round((idleCount / total) * 100);
+
+    const totalWear = items.reduce((s, i) => s + (i.wearCount || 0), 0);
+    const totalValue = items.reduce((s, i) => s + (i.price || 0), 0);
+    const avgCost = totalWear > 0 ? (totalValue / totalWear).toFixed(1) : '--';
 
     const catBars = Utils.CAT_ORDER.map(cat => {
       const n = catCount[cat] || 0;
@@ -87,10 +133,26 @@ const shoppingModule = {
       </div>`;
     }).join('') || '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">暂无场合标签</div>';
 
-    const totalValue = items.reduce((s, i) => s + (i.price || 0), 0);
     const avgWear = total > 0 ? (items.reduce((s, i) => s + (i.wearCount || 0), 0) / total).toFixed(1) : 0;
 
+    const healthGrade = basicCoverage >= 80 && colorRichness >= 30 && idleRate <= 15 ? 'A' :
+                        basicCoverage >= 60 && colorRichness >= 20 && idleRate <= 25 ? 'B' :
+                        basicCoverage >= 40 || idleRate <= 40 ? 'C' : 'D';
+    const gradeColors = { A: '#6AAA7A', B: '#c9a845', C: '#F0A05A', D: '#D45A5A' };
+
     panel.innerHTML = `
+      <div class="health-grade-row">
+        <div class="health-grade" style="background:${gradeColors[healthGrade]}20;color:${gradeColors[healthGrade]};">
+          <div class="hg-letter">${healthGrade}</div>
+          <div class="hg-label">衣橱健康度</div>
+        </div>
+        <div class="health-metrics">
+          <div class="hm-item"><span class="hm-val" style="color:${basicCoverage >= 70 ? '#6AAA7A' : basicCoverage >= 40 ? '#F0A05A' : '#D45A5A'}">${basicCoverage}%</span><span class="hm-label">基础款覆盖</span></div>
+          <div class="hm-item"><span class="hm-val" style="color:${colorRichness >= 30 ? '#6AAA7A' : colorRichness >= 15 ? '#F0A05A' : '#D45A5A'}">${colorRichness}%</span><span class="hm-label">颜色丰富度</span></div>
+          <div class="hm-item"><span class="hm-val" style="color:${idleRate <= 15 ? '#6AAA7A' : idleRate <= 30 ? '#F0A05A' : '#D45A5A'}">${idleRate}%</span><span class="hm-label">闲置率</span></div>
+          <div class="hm-item"><span class="hm-val" style="color:#8a6a99">¥${avgCost}</span><span class="hm-label">均次成本</span></div>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
         <div style="background:linear-gradient(135deg,#fef6e4,#fde8d4);padding:12px;border-radius:12px;text-align:center;">
           <div style="font-size:20px;font-weight:700;color:#c98a45;">${total}</div>
@@ -211,6 +273,11 @@ const shoppingModule = {
   async _fromSuggest(idx) {
     const s = this._suggestCache[idx];
     if (!s) return;
+    const similar = this._checkSimilarItems(s.name, s.category);
+    if (similar.length > 0) {
+      const names = similar.map(x => `${x.item.name}(${x.type})`).join('、');
+      if (!confirm(`⚠️ 衣橱中已有类似款：${names}，确定仍要加入？`)) return;
+    }
     await DB.add('wishlist', {
       name: s.name,
       category: s.category,
@@ -238,8 +305,9 @@ const shoppingModule = {
       </div>
       <div class="form-group">
         <label class="form-label">单品名称 *</label>
-        <input type="text" class="form-input" id="sh-name" placeholder="如：米色风衣" value="${item?.name || ''}">
+        <input type="text" class="form-input" id="sh-name" placeholder="如：米色风衣" value="${item?.name || ''}" oninput="shoppingModule._onNameChange(this.value)">
       </div>
+      <div id="sh-similar-warn"></div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">类别</label>
@@ -263,12 +331,24 @@ const shoppingModule = {
         <label class="form-label">备注（购买链接/品牌/尺码参考）</label>
         <textarea class="form-textarea" id="sh-note" placeholder="如：某猫旗舰店 ¥599，尺码M">${item?.note || ''}</textarea>
       </div>
-      ${item?.source === '建议' ? '' : ''}
       <div style="display:flex; gap:10px; margin-top:20px;">
         <button class="btn-ghost btn-block btn-md" onclick="Utils.closeModal()">取消</button>
         <button class="btn-primary btn-block btn-md" onclick="shoppingModule.saveItem(${editId || 'null'})">保存</button>
       </div>
     `);
+  },
+
+  _onNameChange(name) {
+    const cat = document.getElementById('sh-category')?.value;
+    if (!name || !cat) return;
+    const similar = this._checkSimilarItems(name, cat);
+    const warn = document.getElementById('sh-similar-warn');
+    if (similar.length > 0) {
+      const names = similar.map(x => `${x.item.name}(${x.type})`).join('、');
+      warn.innerHTML = `<div style="background:#fff8e0;border:1px solid #ffe0a0;border-radius:10px;padding:10px 12px;font-size:12px;color:#a87020;margin-bottom:12px;">⚠️ 衣橱中已有类似款：${names}</div>`;
+    } else {
+      warn.innerHTML = '';
+    }
   },
 
   async saveItem(editId) {
@@ -337,6 +417,7 @@ const shoppingModule = {
           <div class="si-name">
             ${w.name}
             ${w.source === '建议' ? '<span style="font-size:9px;padding:1px 6px;background:#e0f0e8;color:#6a997a;border-radius:8px;margin-left:4px;">建议</span>' : ''}
+            ${w.source && w.source.startsWith('灵感:') ? '<span style="font-size:9px;padding:1px 6px;background:#e8d6ef;color:#8a6a99;border-radius:8px;margin-left:4px;">灵感</span>' : ''}
           </div>
           <div class="si-reason">${w.category}${w.note ? ' · ' + w.note.slice(0, 24) : ''}</div>
         </div>

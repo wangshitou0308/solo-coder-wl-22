@@ -4,6 +4,11 @@ const outfitModule = {
   currentMonth: new Date().getMonth(),
   selectedItems: [],
   currentView: 'calendar',
+  _pendingReasons: null,
+  _pendingGoal: null,
+  _currentRating: 0,
+  _modalGoal: '',
+  _modalReasons: [],
 
   async init() {
     this.outfits = (await DB.getAll('outfits')).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -25,6 +30,7 @@ const outfitModule = {
     if (this.currentMonth < 0) { this.currentMonth = 11; this.currentYear--; }
     this.renderCalendar();
   },
+
   nextMonth() {
     this.currentMonth++;
     if (this.currentMonth > 11) { this.currentMonth = 0; this.currentYear++; }
@@ -82,8 +88,20 @@ const outfitModule = {
     const selScenes = of?.scenes || [];
     const selSeasons = of?.seasons || [Utils.getSeason(new Date(today))];
     this.selectedItems = of?.itemIds || [];
-
+    this._currentRating = of?.rating || 0;
+    const selFeedback = of?.feedbackTags || [];
     const weather = of?.weather || Utils.mockWeather();
+    const goal = of?.goal || this._pendingGoal || '';
+    const reasons = of?.reasons || this._pendingReasons || [];
+    this._modalGoal = goal;
+    this._modalReasons = reasons;
+    this._pendingReasons = null;
+    this._pendingGoal = null;
+
+    let diaryText = of?.diary || '';
+    if (!editId && reasons.length > 0 && !diaryText) {
+      diaryText = reasons.join('\n');
+    }
 
     const scenes = Utils.SCENES.map(s =>
       `<button class="tag-check scene ${selScenes.includes(s) ? 'active' : ''}"
@@ -92,6 +110,14 @@ const outfitModule = {
     const seasons = Utils.SEASONS.map(s =>
       `<button class="tag-check season ${selSeasons.includes(s) ? 'active' : ''}"
         onclick="this.classList.toggle('active')">${s}</button>`
+    ).join('');
+
+    const starsHtml = [1, 2, 3, 4, 5].map(i =>
+      `<span class="star" data-val="${i}" onclick="outfitModule._setRating(${i})" style="font-size:28px;cursor:pointer;color:${i <= this._currentRating ? '#f0c040' : '#ddd'};transition:color 0.2s;">★</span>`
+    ).join('');
+
+    const feedbackHtml = Utils.FEEDBACK_TAGS.map(t =>
+      `<button class="tag-check ${selFeedback.includes(t.id) ? 'active' : ''}" data-fid="${t.id}" onclick="this.classList.toggle('active')">${t.icon} ${t.label}</button>`
     ).join('');
 
     Utils.showModal(`
@@ -121,6 +147,17 @@ const outfitModule = {
       <div class="form-group">
         <label class="form-label">天气描述</label>
         <input type="text" class="form-input" id="of-wdesc" value="${weather.desc}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">穿搭满意度</label>
+        <div id="of-rating-stars" style="display:flex;gap:4px;">${starsHtml}</div>
+        <input type="hidden" id="of-rating" value="${this._currentRating}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">穿搭感受</label>
+        <div class="tag-check-group" id="of-feedback">${feedbackHtml}</div>
       </div>
 
       <div class="form-group">
@@ -154,7 +191,7 @@ const outfitModule = {
 
       <div class="form-group">
         <label class="form-label">活动日记</label>
-        <textarea class="form-textarea" id="of-diary" placeholder="今天去了哪里？心情如何？有什么穿搭心得...">${of?.diary || ''}</textarea>
+        <textarea class="form-textarea" id="of-diary" placeholder="今天去了哪里？心情如何？有什么穿搭心得...">${diaryText}</textarea>
       </div>
 
       <div style="display:flex; gap:10px; margin-top:20px;">
@@ -162,6 +199,15 @@ const outfitModule = {
         <button class="btn-primary btn-block btn-md" onclick="outfitModule.saveOutfit(${editId || 'null'})">保存穿搭</button>
       </div>
     `);
+  },
+
+  _setRating(val) {
+    this._currentRating = val;
+    document.getElementById('of-rating').value = val;
+    document.querySelectorAll('#of-rating-stars .star').forEach(s => {
+      const sv = parseInt(s.dataset.val);
+      s.style.color = sv <= val ? '#f0c040' : '#ddd';
+    });
   },
 
   _renderPicker() {
@@ -278,6 +324,10 @@ const outfitModule = {
     const seasons = Array.from(document.querySelectorAll('#of-seasons .tag-check'))
       .filter(el => el.classList.contains('active'))
       .map(el => el.textContent.trim());
+    const feedbackTags = Array.from(document.querySelectorAll('#of-feedback .tag-check'))
+      .filter(el => el.classList.contains('active'))
+      .map(el => el.dataset.fid);
+    const rating = parseInt(document.getElementById('of-rating').value) || 0;
 
     const data = {
       date,
@@ -290,8 +340,16 @@ const outfitModule = {
       itemIds: [...this.selectedItems],
       photo: this._getPhoto(),
       diary: document.getElementById('of-diary').value.trim(),
+      rating,
+      feedbackTags,
+      goal: this._modalGoal || '',
+      reasons: this._modalReasons || [],
       updatedAt: Utils.todayStr()
     };
+
+    this._modalGoal = '';
+    this._modalReasons = [];
+
     const old = editId ? this.outfits.find(o => o.id === editId) : null;
     if (editId) {
       await this._updateWearCounts(old.itemIds, data.itemIds, date);
@@ -330,6 +388,27 @@ const outfitModule = {
       </div>`;
     }).join('');
 
+    const ratingStars = of.rating ? `<div style="margin-bottom:8px;">
+      <span style="font-size:13px;color:var(--text-muted);">满意度：</span>
+      ${[1,2,3,4,5].map(i => `<span style="font-size:18px;color:${i <= of.rating ? '#f0c040' : '#ddd'};">★</span>`).join('')}
+    </div>` : '';
+
+    const feedbackHtml = (of.feedbackTags && of.feedbackTags.length > 0) ? `<div style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px;">
+      ${of.feedbackTags.map(fid => {
+        const tag = Utils.FEEDBACK_TAGS.find(t => t.id === fid);
+        return tag ? `<span style="padding:3px 8px;background:var(--bg-soft);border-radius:10px;font-size:11px;">${tag.icon} ${tag.label}</span>` : '';
+      }).join('')}
+    </div>` : '';
+
+    const goalHtml = of.goal ? `<div style="margin-bottom:8px;">
+      <span style="font-size:12px;color:var(--text-muted);">搭配目标：</span>
+      <span style="padding:3px 10px;background:linear-gradient(135deg,#e8a5b0,#c9a8d4);color:#fff;border-radius:10px;font-size:11px;">${of.goal}</span>
+    </div>` : '';
+
+    const reasonsHtml = (of.reasons && of.reasons.length > 0) ? `<div style="margin-bottom:8px;background:var(--bg-soft);padding:10px 12px;border-radius:10px;font-size:12px;color:var(--text-secondary);line-height:1.7;">
+      ${of.reasons.map(r => '· ' + r).join('<br>')}
+    </div>` : '';
+
     Utils.showModal(`
       <div class="modal-header">
         <div class="modal-title">${of.date} 穿搭</div>
@@ -347,6 +426,10 @@ const outfitModule = {
           </div>
         </div>
       </div>
+      ${ratingStars}
+      ${feedbackHtml}
+      ${goalHtml}
+      ${reasonsHtml}
       <div class="outfit-items" style="margin-bottom:14px;">${itemsHtml}</div>
       ${of.photo ? `<div class="outfit-photo" style="margin:0 0 14px;"><img src="${of.photo}"></div>` : ''}
       ${of.diary ? `<div class="outfit-diary">📖 ${of.diary}</div>` : ''}
@@ -369,6 +452,7 @@ const outfitModule = {
         const emoji = Utils.CATEGORY_EMOJI[it.subCategory] || '👕';
         return `<div class="oi-item"><div class="oi-img">${it.photo ? `<img src="${it.photo}">` : emoji}</div><div class="oi-name">${it.name}</div></div>`;
       }).join('');
+      const ratingBadge = o.rating ? `<span style="font-size:12px;color:#f0c040;">${'★'.repeat(o.rating)}${'☆'.repeat(5 - o.rating)}</span>` : '';
       return `<div class="outfit-card" onclick="outfitModule.viewOutfit(${o.id})">
         <div class="outfit-header">
           <div>
@@ -376,6 +460,7 @@ const outfitModule = {
             <div class="outfit-weather">${o.weather?.icon || '☀️'} ${o.weather?.temp || ''}°C · ${o.weather?.desc || ''}</div>
           </div>
           <div class="outfit-scenes">
+            ${ratingBadge}
             ${(o.seasons || []).map(s => `<span class="outfit-season">${s}</span>`).join('')}
             ${(o.scenes || []).slice(0, 2).map(s => `<span class="outfit-scene-tag">${s}</span>`).join('')}
           </div>
@@ -387,6 +472,31 @@ const outfitModule = {
   },
 
   renderRanks() {
+    const satisfactionArr = this.outfits
+      .filter(o => o.rating && o.rating >= 1)
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 10);
+
+    document.getElementById('rankSatisfactionList').innerHTML = satisfactionArr.length === 0 ?
+      `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">暂无数据（保存穿搭时评分即可上榜）</div>` :
+      satisfactionArr.map((o, i) => {
+        const itemNames = o.itemIds.map(iid => {
+          const it = wardrobeModule.items.find(x => x.id === iid);
+          return it ? it.name : '';
+        }).filter(Boolean).slice(0, 3).join('、');
+        return `<div class="rank-item" onclick="outfitModule.viewOutfit(${o.id})" style="cursor:pointer;">
+          <div class="rank-num">${i + 1}</div>
+          <div class="rank-info" style="flex:1;">
+            <div class="rank-name" style="display:flex;align-items:center;gap:6px;">
+              <span style="color:#f0c040;font-size:14px;">${'★'.repeat(o.rating)}${'☆'.repeat(5 - o.rating)}</span>
+              <span style="font-size:13px;">${o.date}</span>
+            </div>
+            <div class="rank-meta" style="margin-top:2px;">${itemNames || '无单品信息'}</div>
+          </div>
+          <div class="rank-value" style="font-size:14px;color:#f0c040;">${o.rating}分</div>
+        </div>`;
+      }).join('');
+
     const freqMap = {};
     this.outfits.forEach(o => o.itemIds.forEach(id => { freqMap[id] = (freqMap[id] || 0) + 1; }));
     const freqArr = Object.entries(freqMap)
@@ -430,5 +540,9 @@ const outfitModule = {
           <div class="rank-value">¥${r.cost.toFixed(1)}</div>
         </div>`;
       }).join('');
+  },
+
+  getHighRatedOutfits() {
+    return this.outfits.filter(o => (o.rating || 0) >= 4);
   }
 };

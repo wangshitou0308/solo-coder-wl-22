@@ -1,9 +1,12 @@
 const bodyModule = {
   records: [],
   currentTrend: 'weight',
+  _prevBodyType: null,
+  bodyTypeChanged: false,
 
   async init() {
     this.records = (await DB.getAll('bodyRecords')).sort((a, b) => new Date(a.date) - new Date(b.date));
+    this.bodyTypeChanged = false;
     this.render();
   },
 
@@ -17,7 +20,7 @@ const bodyModule = {
   },
 
   bodyTypeClassify(r) {
-    if (!r.waist || !r.hip || !r.shoulder) return { t: '待评估', d: '缺少围度数据' };
+    if (!r || !r.waist || !r.hip || !r.shoulder) return { t: '待评估', d: '缺少围度数据' };
     const whr = r.waist / r.hip;
     const swr = r.shoulder / r.waist;
     const bustHipDiff = Math.abs((r.bust || 90) - r.hip);
@@ -29,8 +32,140 @@ const bodyModule = {
     return { t: '✦ 匀称型', d: '身材标准，适配多种风格' };
   },
 
+  _calcSizeRef(record) {
+    if (!record) return null;
+    const sizes = [
+      { label: 'XS', h: 155, bust: 80, waist: 62, hip: 86 },
+      { label: 'S', h: 160, bust: 84, waist: 66, hip: 90 },
+      { label: 'M', h: 165, bust: 88, waist: 70, hip: 94 },
+      { label: 'L', h: 170, bust: 92, waist: 74, hip: 98 },
+      { label: 'XL', h: 175, bust: 96, waist: 78, hip: 102 }
+    ];
+    let best = null;
+    let bestScore = Infinity;
+    for (const s of sizes) {
+      let diff = 0;
+      let n = 0;
+      if (record.height) { diff += Math.abs(record.height - s.h); n++; }
+      if (record.bust) { diff += Math.abs(record.bust - s.bust); n++; }
+      if (record.waist) { diff += Math.abs(record.waist - s.waist); n++; }
+      if (record.hip) { diff += Math.abs(record.hip - s.hip); n++; }
+      if (n === 0) continue;
+      if (diff / n < bestScore) {
+        bestScore = diff / n;
+        best = s.label;
+      }
+    }
+    return best;
+  },
+
+  renderStyleAdviceCard() {
+    const container = document.getElementById('styleAdviceCard');
+    if (!container) return;
+    const latest = this.records[this.records.length - 1];
+    const bt = this.bodyTypeClassify(latest || {});
+    const advice = Utils.BODY_TYPE_ADVICE[bt.t];
+    if (!advice) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = `<div class="section-card">
+      <div class="section-header">
+        <h3>👗 体型穿搭建议</h3>
+        <span style="font-size:12px;color:var(--primary);font-weight:500;">${bt.t}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#6AAA7A;margin-bottom:6px;">✅ 适合版型</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${advice.fit.map(f => `<span class="ctag">${f}</span>`).join('')}</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#D45A5A;margin-bottom:6px;">❌ 避免版型</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${advice.avoid.map(f => `<span class="ctag">${f}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">🎨 推荐颜色位置</div>
+        <div style="display:flex;gap:12px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap;">
+          <span>上身: ${advice.colors.top}</span>
+          <span>下身: ${advice.colors.bottom}</span>
+          <span>点缀: ${advice.colors.accent}</span>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding:8px 12px;background:var(--bg-soft);border-radius:8px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
+        💡 ${advice.tips}
+      </div>
+    </div>`;
+  },
+
+  _renderSizeRef() {
+    const container = document.getElementById('sizeRefCard');
+    if (!container) return;
+    const latest = this.records[this.records.length - 1];
+    const size = this._calcSizeRef(latest);
+    if (!size) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = `<div style="background:var(--bg-card);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow-sm);border:1px solid var(--border);display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--primary-light),var(--secondary-light));display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📏</div>
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);">参考尺码</div>
+        <div style="font-size:22px;font-weight:700;font-family:'Playfair Display',serif;color:var(--primary);">${size}</div>
+      </div>
+      <div style="margin-left:auto;font-size:11px;color:var(--text-muted);max-width:140px;">基于身高/胸围/腰围/臀围综合推荐</div>
+    </div>`;
+  },
+
+  _getLatestTarget() {
+    for (let i = this.records.length - 1; i >= 0; i--) {
+      const r = this.records[i];
+      if (r.targetWeight || r.targetWaist) return r;
+    }
+    return null;
+  },
+
+  _renderTargetSection() {
+    const container = document.getElementById('targetSection');
+    if (!container) return;
+    const latest = this.records[this.records.length - 1];
+    const targetRec = this._getLatestTarget();
+    if (!targetRec || (!targetRec.targetWeight && !targetRec.targetWaist)) {
+      container.innerHTML = '';
+      return;
+    }
+    const tw = targetRec.targetWeight;
+    const twaist = targetRec.targetWaist;
+    const cw = latest?.weight;
+    const cwaist = latest?.waist;
+    let html = `<div class="section-card"><div class="section-header"><h3>🎯 目标设定</h3></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">`;
+    if (tw) {
+      const diff = cw != null ? (cw - tw).toFixed(1) : null;
+      const diffColor = diff != null ? (cw > tw ? '#D45A5A' : cw < tw ? '#5A8AC4' : '#6AAA7A') : 'var(--text-muted)';
+      const diffLabel = diff != null ? (cw > tw ? `+${diff}` : diff) : '-';
+      html += `<div style="background:var(--bg-soft);border-radius:var(--radius-md);padding:12px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">体重目标</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);">${tw}<span style="font-size:12px;font-weight:400;"> kg</span></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前 <strong>${cw ?? '-'}</strong> kg · 差值 <span style="color:${diffColor};font-weight:600;">${diffLabel}</span></div>
+      </div>`;
+    }
+    if (twaist) {
+      const diff = cwaist != null ? (cwaist - twaist).toFixed(1) : null;
+      const diffColor = diff != null ? (cwaist > twaist ? '#D45A5A' : cwaist < twaist ? '#5A8AC4' : '#6AAA7A') : 'var(--text-muted)';
+      const diffLabel = diff != null ? (cwaist > twaist ? `+${diff}` : diff) : '-';
+      html += `<div style="background:var(--bg-soft);border-radius:var(--radius-md);padding:12px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">腰围目标</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);">${twaist}<span style="font-size:12px;font-weight:400;"> cm</span></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前 <strong>${cwaist ?? '-'}</strong> cm · 差值 <span style="color:${diffColor};font-weight:600;">${diffLabel}</span></div>
+      </div>`;
+    }
+    html += `</div></div>`;
+    container.innerHTML = html;
+  },
+
   showRecordModal(editId = null) {
     const rec = editId ? this.records.find(r => r.id === editId) : null;
+    const targetRec = this._getLatestTarget();
     const today = Utils.todayStr();
     Utils.showModal(`
       <div class="modal-header">
@@ -79,6 +214,19 @@ const bodyModule = {
           <input type="number" class="form-input" id="br-calf" step="0.1" placeholder="34" value="${rec?.calf ?? ''}">
         </div>
       </div>
+      <div style="margin:16px 0 8px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">🎯 目标设定</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">目标体重 (kg)</label>
+            <input type="number" class="form-input" id="br-targetWeight" step="0.1" placeholder="50" value="${rec?.targetWeight ?? targetRec?.targetWeight ?? ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">目标腰围 (cm)</label>
+            <input type="number" class="form-input" id="br-targetWaist" step="0.1" placeholder="65" value="${rec?.targetWaist ?? targetRec?.targetWaist ?? ''}">
+          </div>
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label">备注</label>
         <input type="text" class="form-input" id="br-note" placeholder="如：生理期、运动后..." value="${rec?.note ?? ''}">
@@ -95,6 +243,8 @@ const bodyModule = {
       const v = document.getElementById(id)?.value;
       return v === '' ? null : parseFloat(v);
     };
+    const prevLatest = this.records.length > 0 ? this.records[this.records.length - 1] : null;
+    const prevType = prevLatest ? this.bodyTypeClassify(prevLatest).t : null;
     const data = {
       date: document.getElementById('br-date').value,
       height: val('br-height'),
@@ -105,6 +255,8 @@ const bodyModule = {
       hip: val('br-hip'),
       thigh: val('br-thigh'),
       calf: val('br-calf'),
+      targetWeight: val('br-targetWeight'),
+      targetWaist: val('br-targetWaist'),
       note: document.getElementById('br-note').value || null
     };
     if (!data.date) return Utils.toast('请选择日期');
@@ -120,6 +272,14 @@ const bodyModule = {
     }
     Utils.closeModal();
     await this.init();
+
+    const newLatest = this.records[this.records.length - 1];
+    const newType = newLatest ? this.bodyTypeClassify(newLatest).t : null;
+    if (prevType && newType && prevType !== newType) {
+      this.bodyTypeChanged = true;
+      this._prevBodyType = prevType;
+      Utils.toast(`体型变化：${prevType} → ${newType}，推荐策略将自动调整`);
+    }
   },
 
   async deleteRecord(id) {
@@ -162,6 +322,44 @@ const bodyModule = {
       });
     const colors = { weight: '#d4919a', bmi: '#c9a8d4', waist: '#f5c6a5', hip: '#a8c8d4' };
     Utils.drawLineChart(canvas, data, colors[this.currentTrend]);
+
+    const targetRec = this._getLatestTarget();
+    let targetVal = null;
+    if (this.currentTrend === 'weight' && targetRec?.targetWeight) targetVal = targetRec.targetWeight;
+    if (this.currentTrend === 'waist' && targetRec?.targetWaist) targetVal = targetRec.targetWaist;
+    if (targetVal != null && data.length > 0) {
+      this._drawTargetLine(canvas, targetVal, data);
+    }
+  },
+
+  _drawTargetLine(canvas, targetVal, data) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = canvas.height / dpr;
+    const pad = { t: 20, r: 16, b: 30, l: 40 };
+    const gh = h - pad.t - pad.b;
+    const vals = data.map(d => d.v);
+    const minV = Math.min(...vals) * 0.95;
+    const maxV = Math.max(...vals) * 1.05;
+    const range = maxV - minV || 1;
+    if (targetVal < minV || targetVal > maxV) return;
+    const y = pad.t + gh - ((targetVal - minV) / range) * gh;
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#D45A5A';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, y);
+    ctx.lineTo(w - pad.r, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#D45A5A';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('目标 ' + targetVal, w - pad.r, y - 5);
+    ctx.restore();
   },
 
   renderSilhouette(r) {
@@ -205,6 +403,9 @@ const bodyModule = {
 
     this.renderSilhouette(latest);
     this.renderChart();
+    this.renderStyleAdviceCard();
+    this._renderSizeRef();
+    this._renderTargetSection();
 
     const list = document.getElementById('bodyRecordList');
     if (this.records.length === 0) {

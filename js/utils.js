@@ -117,6 +117,58 @@ const Utils = {
   SEASONS: ['春', '夏', '秋', '冬'],
   STYLES: ['极简', '甜美', '复古', '街头', '通勤', '度假'],
 
+  DRESSING_GOALS: ['显瘦', '显高', '通勤专业', '温柔约会', '活力休闲', '高级感'],
+
+  BODY_TYPE_ADVICE: {
+    '🍎 苹果型': {
+      fit: ['A字裙', 'V领上衣', '高腰下装', '宽松直筒', '落肩款'],
+      avoid: ['紧身腰线', '短上衣', '低腰裤', '大面积横条', '腰部装饰'],
+      colors: { top: '深色系', bottom: '浅色系/大地色', accent: '冷色系配饰' },
+      tips: '上身深色收缩+下身浅色膨胀，引导视线下移'
+    },
+    '🍐 梨型': {
+      fit: ['上宽下紧', '荷叶边上衣', 'A字裙', '直筒裤', '肩部装饰款'],
+      avoid: ['紧身裤', '短裙', '胯部装饰', '低腰', '臀部口袋设计'],
+      colors: { top: '浅色系/暖色系', bottom: '深色系', accent: '颈部配饰' },
+      tips: '上身浅色膨胀+下身深色收缩，平衡肩胯比例'
+    },
+    '⏳ 沙漏型': {
+      fit: ['收腰款', '高腰裙', '腰带装饰', 'X型连衣裙', '包臀裙'],
+      avoid: ['oversize', '直筒裙', '低腰裤', '无腰线款', '均码宽松'],
+      colors: { top: '任意', bottom: '同色系', accent: '腰间点缀' },
+      tips: '强调腰线是关键，X版型最能展现身材优势'
+    },
+    '▢ 矩型': {
+      fit: ['制造腰线款', '荷叶边', '层叠搭配', 'A字裙', '腰带装饰'],
+      avoid: ['直筒连衣裙', '无腰线', '紧身套装', '过于平直剪裁'],
+      colors: { top: '浅色系/暖色系', bottom: '深色系', accent: '腰间/颈部' },
+      tips: '用腰线和层次感制造曲线，上下不同色增加层次'
+    },
+    '🔻 倒三角': {
+      fit: ['下摆蓬松', 'A字裙', '阔腿裤', 'V领/方领', '下装装饰款'],
+      avoid: ['垫肩', '泡泡袖', '一字领', '高领', '肩部装饰'],
+      colors: { top: '深色系', bottom: '浅色系/暖色系', accent: '下半身点缀' },
+      tips: '上身深色收缩+下身浅色膨胀，视觉平衡肩胯'
+    },
+    '✦ 匀称型': {
+      fit: ['多数版型均可', '收腰款', '直筒', 'A字'],
+      avoid: ['极端紧身', '极端oversize'],
+      colors: { top: '任意', bottom: '任意', accent: '任意' },
+      tips: '身材标准百搭，关注风格和场合即可'
+    }
+  },
+
+  FEEDBACK_TAGS: [
+    { id: 'too_cold', label: '太冷', icon: '🥶' },
+    { id: 'too_hot', label: '太热', icon: '🥵' },
+    { id: 'looks_fat', label: '显胖', icon: '😰' },
+    { id: 'looks_slim', label: '显瘦', icon: '😍' },
+    { id: 'complimented', label: '被夸了', icon: '✨' },
+    { id: 'uncomfortable', label: '不舒服', icon: '😣' },
+    { id: 'confident', label: '自信满满', icon: '💪' },
+    { id: 'not_match', label: '搭配不协调', icon: '🤔' }
+  ],
+
   colorMatch(a, b) {
     if (!a || !b) return 0.6;
     const ca = this.COLORS.find(c => c.name === a);
@@ -151,6 +203,80 @@ const Utils = {
     }
     return '上衣';
   },
+
+  isItemSlimming(item, bodyType) {
+    const advice = this.BODY_TYPE_ADVICE[bodyType];
+    if (!advice) return 0;
+    const name = (item.name || '').toLowerCase();
+    const sub = item.subCategory || '';
+    let score = 0;
+    advice.fit.forEach(f => {
+      if (name.includes(f) || sub.includes(f)) score += 15;
+    });
+    advice.avoid.forEach(f => {
+      if (name.includes(f) || sub.includes(f)) score -= 15;
+    });
+    return score;
+  },
+
+  isItemHeightening(item) {
+    const name = (item.name || '').toLowerCase();
+    const sub = item.subCategory || '';
+    let score = 0;
+    if (name.includes('高腰') || sub.includes('高腰')) score += 20;
+    if (name.includes('v领') || sub.includes('v领')) score += 10;
+    if (item.category === '鞋靴' && (name.includes('高跟') || name.includes('厚底'))) score += 15;
+    if (name.includes('短上衣') || name.includes('croptop')) score += 12;
+    if (name.includes('低腰')) score -= 15;
+    return score;
+  },
+
+  isItemProfessional(item) {
+    const name = (item.name || '').toLowerCase();
+    const sub = item.subCategory || '';
+    let score = 0;
+    if (sub.includes('西装') || sub.includes('衬衫') || sub.includes('西装裤')) score += 20;
+    if (name.includes('西装') || name.includes('衬衫')) score += 15;
+    if (item.category === '鞋靴' && (name.includes('高跟') || name.includes('皮鞋'))) score += 10;
+    if (name.includes('破洞') || name.includes('拖鞋')) score -= 20;
+    return score;
+  },
+
+  isItemGentle(item) {
+    const name = (item.name || '').toLowerCase();
+    const sub = item.subCategory || '';
+    let score = 0;
+    if (sub.includes('针织') || sub.includes('连衣裙') || sub.includes('半身裙')) score += 15;
+    if (name.includes('针织') || name.includes('蕾丝') || name.includes('碎花')) score += 15;
+    const warmColors = ['粉色', '米白', '白色', '碎花'];
+    if (warmColors.includes(item.color)) score += 10;
+    if (name.includes('铆钉') || name.includes('皮革')) score -= 15;
+    return score;
+  },
+
+  goalScoreForItem(item, goal, bodyType) {
+    switch (goal) {
+      case '显瘦': return this.isItemSlimming(item, bodyType);
+      case '显高': return this.isItemHeightening(item);
+      case '通勤专业': return this.isItemProfessional(item);
+      case '温柔约会': return this.isItemGentle(item);
+      case '活力休闲': {
+        let s = 0;
+        if (item.category === '鞋靴' && item.subCategory === '运动鞋') s += 20;
+        if ((item.name || '').includes('卫衣') || (item.name || '').includes('运动')) s += 15;
+        return s;
+      }
+      case '高级感': {
+        let s = 0;
+        const advColors = ['黑色', '白色', '藏青', '卡其', '灰色'];
+        if (advColors.includes(item.color)) s += 15;
+        if (item.subCategory === '西装外套' || item.subCategory === '风衣' || item.subCategory === '大衣') s += 20;
+        return s;
+      }
+      default: return 0;
+    }
+  },
+
   drawLineChart(canvas, data, color = '#d4919a') {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;

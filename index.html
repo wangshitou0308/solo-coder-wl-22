@@ -51,6 +51,9 @@
         </div>
       </div>
 
+      <div id="styleAdviceCard"></div>
+      <div id="sizeRefCard"></div>
+
       <div class="section-card">
         <div class="section-header">
           <h3>身材轮廓示意</h3>
@@ -77,6 +80,8 @@
           </svg>
         </div>
       </div>
+
+      <div id="targetSection"></div>
 
       <div class="section-card">
         <div class="section-header">
@@ -139,6 +144,9 @@
         <div class="ws-item"><span class="ws-num" id="wsWorn">0</span><span class="ws-label">本月穿</span></div>
       </div>
 
+      <div id="wardrobeHealthCheck"></div>
+      <div id="wardrobeIdleWakeUp"></div>
+
       <div class="wardrobe-grid" id="wardrobeGrid">
         <div class="empty-state">
           <div class="empty-icon">👗</div>
@@ -179,6 +187,10 @@
 
       <div class="outfit-view outfit-rank-view" id="outfitRankView">
         <div class="rank-section">
+          <h4>⭐ 最满意穿搭 TOP10</h4>
+          <div id="rankSatisfactionList" class="rank-list"></div>
+        </div>
+        <div class="rank-section" style="margin-top:20px">
           <h4>🔥 穿着频次 TOP10</h4>
           <div id="rankFreqList" class="rank-list"></div>
         </div>
@@ -213,6 +225,18 @@
             <option value="运动">运动健身</option>
             <option value="正式">正式场合</option>
           </select>
+        </div>
+      </div>
+
+      <div class="goal-bar">
+        <span class="goal-label">穿搭目标：</span>
+        <div class="goal-tags">
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'显瘦')">显瘦</button>
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'显高')">显高</button>
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'通勤专业')">通勤专业</button>
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'温柔约会')">温柔约会</button>
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'活力休闲')">活力休闲</button>
+          <button class="goal-tag" onclick="recommendModule.onGoalChange(this,'高级感')">高级感</button>
         </div>
       </div>
 
@@ -308,15 +332,14 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="js/db.js?v=4"></script>
-<script src="js/utils.js?v=4"></script>
-<script src="js/body.js?v=4"></script>
-<script src="js/wardrobe.js?v=4"></script>
-<script src="js/outfit.js?v=4"></script>
-<script src="js/recommend.js?v=4"></script>
-<script src="js/shopping.js?v=4"></script>
-<script src="js/inspiration.js?v=4"></script>
-<script src="js/app.js?v=4"></script>
-<link rel="stylesheet" href="css/style.css?v=4">
+<script src="js/db.js?v=5"></script>
+<script src="js/utils.js?v=5"></script>
+<script src="js/body.js?v=5"></script>
+<script src="js/wardrobe.js?v=5"></script>
+<script src="js/outfit.js?v=5"></script>
+<script src="js/recommend.js?v=5"></script>
+<script src="js/shopping.js?v=5"></script>
+<script src="js/inspiration.js?v=5"></script>
+<script src="js/app.js?v=5"></script>
 </body>
 </html>

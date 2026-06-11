@@ -1,10 +1,12 @@
 const wardrobeModule = {
   items: [],
+  outfits: [],
   filterCat: 'all',
   filterScene: 'all',
 
   async init() {
     this.items = await DB.getAll('clothes');
+    this.outfits = await DB.getAll('outfits');
     this.filterCat = 'all';
     this.filterScene = 'all';
     document.querySelectorAll('#wardrobeCategoryFilter .filter-tag').forEach(t => {
@@ -46,6 +48,15 @@ const wardrobeModule = {
     }
     const last = item.lastWorn || item.createdAt || Utils.todayStr();
     return Utils.daysDiff(Utils.todayStr(), last) > 90;
+  },
+
+  _isIdle30(item) {
+    if (item.wearCount === 0) {
+      const days = Utils.daysDiff(Utils.todayStr(), item.createdAt || Utils.todayStr());
+      return days > 30;
+    }
+    const last = item.lastWorn || item.createdAt || Utils.todayStr();
+    return Utils.daysDiff(Utils.todayStr(), last) > 30;
   },
 
   showItemModal(editId = null) {
@@ -248,12 +259,64 @@ const wardrobeModule = {
     if (typeof shoppingModule !== 'undefined') shoppingModule.refresh();
   },
 
+  findSimilarItems(item) {
+    return this.items.filter(i => {
+      if (i.id === item.id) return false;
+      if (i.subCategory !== item.subCategory) return false;
+      const ci = Utils.COLORS.find(c => c.name === i.color);
+      const ct = Utils.COLORS.find(c => c.name === item.color);
+      if (!ci || !ct) return false;
+      return ci.cat === ct.cat;
+    });
+  },
+
+  _getWornDates(item) {
+    return (item.wornDates || []).sort().reverse();
+  },
+
+  _getMostPairedItems(item) {
+    const pairMap = {};
+    this.outfits.forEach(o => {
+      if (!o.itemIds || !o.itemIds.includes(item.id)) return;
+      o.itemIds.forEach(id => {
+        if (id === item.id) return;
+        pairMap[id] = (pairMap[id] || 0) + 1;
+      });
+    });
+    return Object.entries(pairMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, count]) => {
+        const it = this.items.find(i => i.id == id);
+        return it ? { item: it, count } : null;
+      })
+      .filter(Boolean);
+  },
+
   viewItem(id) {
     const it = this.items.find(i => i.id === id);
     if (!it) return;
     const idle = this.isIdle(it);
     const monthWorn = this.getMonthWornCount(it);
     const cpCost = it.wearCount > 0 ? (it.price / it.wearCount).toFixed(1) : '-';
+    const wornDates = this._getWornDates(it);
+    const pairedItems = this._getMostPairedItems(it);
+
+    const wornDatesHtml = wornDates.length > 0
+      ? wornDates.slice(0, 10).map(d => `<span style="padding:3px 8px;background:var(--bg-soft);border-radius:8px;font-size:11px;margin:2px 2px;">${d}</span>`).join('') + (wornDates.length > 10 ? `<span style="font-size:11px;color:var(--text-muted);">等${wornDates.length}天</span>` : '')
+      : '<span style="font-size:12px;color:var(--text-muted);">暂无穿着记录</span>';
+
+    const pairedHtml = pairedItems.length > 0
+      ? pairedItems.map(p => {
+          const emoji = Utils.CATEGORY_EMOJI[p.item.subCategory] || '👕';
+          return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg-soft);border-radius:10px;margin:3px 4px 3px 0;font-size:12px;">
+            ${p.item.photo ? `<img src="${p.item.photo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : emoji}
+            <span>${p.item.name}</span>
+            <span style="color:var(--text-muted);font-size:10px;">×${p.count}</span>
+          </div>`;
+        }).join('')
+      : '<span style="font-size:12px;color:var(--text-muted);">暂无搭配记录</span>';
+
     Utils.showModal(`
       <div class="modal-header">
         <div class="modal-title">衣物详情</div>
@@ -284,6 +347,14 @@ const wardrobeModule = {
         </div>
       </div>
       ${idle ? `<div style="background:#fff0f0; color:#c96565; padding:10px 12px; border-radius:10px; font-size:12px; margin-bottom:14px;">⚠️ 已闲置超过 ${it.wearCount === 0 ? '60' : '90'} 天未穿，可考虑断舍离</div>` : ''}
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">📅 穿着记录</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;">${wornDatesHtml}</div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-primary);">🔗 常搭配单品</div>
+        <div style="display:flex;flex-wrap:wrap;">${pairedHtml}</div>
+      </div>
       ${it.scenes?.length ? `<div style="margin-bottom:10px;"><span style="font-size:12px; color:var(--text-muted);">场合：</span>${it.scenes.map(s => `<span class="ctag scene">${s}</span>`).join('')}</div>` : ''}
       ${it.seasons?.length ? `<div style="margin-bottom:10px;"><span style="font-size:12px; color:var(--text-muted);">季节：</span>${it.seasons.map(s => `<span style="padding:2px 8px; background:#e0f0e8; color:#6a997a; border-radius:10px; font-size:11px;">${s}</span>`).join('')}</div>` : ''}
       ${it.note ? `<div style="background:var(--bg-soft); padding:12px; border-radius:10px; font-size:12px; color:var(--text-secondary); line-height:1.7;">📝 ${it.note}</div>` : ''}
@@ -292,6 +363,139 @@ const wardrobeModule = {
         <button class="btn-danger btn-block btn-md" onclick="wardrobeModule.deleteItem(${it.id})">删除</button>
       </div>
     `);
+  },
+
+  renderHealthCheck() {
+    const total = this.items.length;
+    if (total === 0) return '';
+
+    const catCount = {};
+    this.items.forEach(i => { catCount[i.category] = (catCount[i.category] || 0) + 1; });
+    const coveredCats = Utils.CAT_ORDER.filter(c => catCount[c] && catCount[c] > 0).length;
+    const coverageRate = Math.round((coveredCats / Utils.CAT_ORDER.length) * 100);
+
+    const colorSet = new Set(this.items.map(i => i.color).filter(Boolean));
+    const colorRichness = Math.round((colorSet.size / Utils.COLORS.length) * 100);
+
+    const idleCount = this.items.filter(i => this.isIdle(i)).length;
+    const idleRate = Math.round((idleCount / total) * 100);
+
+    const totalWear = this.items.reduce((s, i) => s + (i.wearCount || 0), 0);
+    const totalValue = this.items.reduce((s, i) => s + (i.price || 0), 0);
+    const avgCost = totalWear > 0 ? (totalValue / totalWear).toFixed(1) : '-';
+
+    const coverageColor = coverageRate >= 80 ? '#6a997a' : coverageRate >= 50 ? '#c98a45' : '#c96565';
+    const richnessColor = colorRichness >= 50 ? '#6a997a' : colorRichness >= 30 ? '#c98a45' : '#c96565';
+    const idleColor = idleRate <= 10 ? '#6a997a' : idleRate <= 30 ? '#c98a45' : '#c96565';
+    const costColor = avgCost === '-' ? '#a9a9b8' : parseFloat(avgCost) <= 100 ? '#6a997a' : parseFloat(avgCost) <= 300 ? '#c98a45' : '#c96565';
+
+    let score = (coverageRate >= 80 ? 30 : coverageRate >= 50 ? 20 : 10)
+      + (colorRichness >= 50 ? 25 : colorRichness >= 30 ? 15 : 5)
+      + (idleRate <= 10 ? 25 : idleRate <= 30 ? 15 : 5)
+      + (avgCost !== '-' && parseFloat(avgCost) <= 100 ? 20 : avgCost !== '-' && parseFloat(avgCost) <= 300 ? 12 : avgCost !== '-' ? 5 : 0);
+    let gradeLabel, gradeColor, gradeText;
+    if (score >= 80) { gradeLabel = 'A'; gradeColor = '#6a997a'; gradeText = '优秀'; }
+    else if (score >= 60) { gradeLabel = 'B'; gradeColor = '#c98a45'; gradeText = '良好'; }
+    else if (score >= 40) { gradeLabel = 'C'; gradeColor = '#d4919a'; gradeText = '一般'; }
+    else { gradeLabel = 'D'; gradeColor = '#c96565'; gradeText = '需改善'; }
+
+    return `
+      <div class="section-card" style="margin:0 0 16px;">
+        <div class="section-header">
+          <h3>🏥 衣橱体检</h3>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:24px;font-weight:800;color:${gradeColor};">${gradeLabel}</span>
+            <span style="font-size:12px;color:${gradeColor};">${gradeText}</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+          <div style="background:var(--bg-soft);padding:10px 8px;border-radius:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:${coverageColor};">${coverageRate}%</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">品类覆盖</div>
+            <div style="font-size:9px;color:var(--text-muted);">${coveredCats}/${Utils.CAT_ORDER.length}类</div>
+          </div>
+          <div style="background:var(--bg-soft);padding:10px 8px;border-radius:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:${richnessColor};">${colorRichness}%</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">色彩丰富</div>
+            <div style="font-size:9px;color:var(--text-muted);">${colorSet.size}种色</div>
+          </div>
+          <div style="background:var(--bg-soft);padding:10px 8px;border-radius:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:${idleColor};">${idleRate}%</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">闲置率</div>
+            <div style="font-size:9px;color:var(--text-muted);">${idleCount}件闲置</div>
+          </div>
+          <div style="background:var(--bg-soft);padding:10px 8px;border-radius:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:${costColor};">${avgCost === '-' ? '-' : '¥' + avgCost}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">均次成本</div>
+            <div style="font-size:9px;color:var(--text-muted);">${totalWear}次穿着</div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _suggestPairForItem(item) {
+    const candidates = this.items.filter(i => {
+      if (i.id === item.id) return false;
+      if (i.category === item.category) return false;
+      return true;
+    });
+    const scored = candidates.map(c => {
+      let score = 0;
+      score += Utils.colorMatch(item.color, c.color) * 40;
+      const commonScenes = (item.scenes || []).filter(s => (c.scenes || []).includes(s));
+      score += commonScenes.length * 15;
+      const commonSeasons = (item.seasons || []).filter(s => (c.seasons || []).includes(s));
+      score += commonSeasons.length * 10;
+      if (c.wearCount > 0) score += 5;
+      return { item: c, score };
+    }).sort((a, b) => b.score - a.score);
+    return scored.slice(0, 3);
+  },
+
+  renderIdleWakeUp() {
+    const idleItems = this.items.filter(i => this._isIdle30(i));
+    if (idleItems.length === 0) return '';
+
+    const itemsHtml = idleItems.slice(0, 6).map(it => {
+      const emoji = Utils.CATEGORY_EMOJI[it.subCategory] || '👕';
+      const pairs = this._suggestPairForItem(it);
+      const pairsHtml = pairs.length > 0
+        ? pairs.map(p => {
+            const pe = Utils.CATEGORY_EMOJI[p.item.subCategory] || '👕';
+            return `<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg-soft);border-radius:8px;font-size:11px;margin:2px 2px;">
+              ${p.item.photo ? `<img src="${p.item.photo}" style="width:20px;height:20px;border-radius:4px;object-fit:cover;">` : `<span style="font-size:12px;">${pe}</span>`}
+              <span>${p.item.name}</span>
+            </div>`;
+          }).join('')
+        : '<span style="font-size:11px;color:var(--text-muted);">暂无推荐</span>';
+      const idleDays = Utils.daysDiff(Utils.todayStr(), it.lastWorn || it.createdAt);
+      return `<div style="background:var(--bg-soft);padding:12px;border-radius:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--bg-card);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+            ${it.photo ? `<img src="${it.photo}" style="width:100%;height:100%;object-fit:cover;">` : emoji}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}</div>
+            <div style="font-size:11px;color:var(--text-muted);">闲置${idleDays}天 · ${it.subCategory}</div>
+          </div>
+          <div style="background:#fff0f0;color:#c96565;padding:3px 8px;border-radius:8px;font-size:10px;white-space:nowrap;">💤 沉睡中</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">✨ 推荐搭配唤醒：</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;">${pairsHtml}</div>
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="section-card" style="margin:0 0 16px;">
+        <div class="section-header">
+          <h3>💤 搭配唤醒</h3>
+          <span style="font-size:11px;color:var(--text-muted);">${idleItems.length}件闲置30天+</span>
+        </div>
+        ${itemsHtml}
+        ${idleItems.length > 6 ? `<div style="text-align:center;font-size:12px;color:var(--text-muted);padding:4px 0;">还有${idleItems.length - 6}件闲置单品</div>` : ''}
+      </div>
+    `;
   },
 
   render() {
@@ -315,6 +519,23 @@ const wardrobeModule = {
     } else {
       warn.style.display = 'none';
     }
+
+    let hcEl = document.getElementById('wardrobeHealthCheck');
+    if (!hcEl) {
+      hcEl = document.createElement('div');
+      hcEl.id = 'wardrobeHealthCheck';
+      const statsRow = document.querySelector('.wardrobe-stats-row');
+      statsRow.parentNode.insertBefore(hcEl, statsRow.nextSibling);
+    }
+    hcEl.innerHTML = this.renderHealthCheck();
+
+    let idleEl = document.getElementById('wardrobeIdleWakeUp');
+    if (!idleEl) {
+      idleEl = document.createElement('div');
+      idleEl.id = 'wardrobeIdleWakeUp';
+      hcEl.parentNode.insertBefore(idleEl, hcEl.nextSibling);
+    }
+    idleEl.innerHTML = this.renderIdleWakeUp();
 
     this.renderGrid();
   },
