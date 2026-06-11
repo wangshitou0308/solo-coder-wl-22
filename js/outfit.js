@@ -79,7 +79,38 @@ const outfitModule = {
       if (confirm(`${date} 还没有穿搭记录，现在创建一条？`)) this.showOutfitModal(null, date);
       return;
     }
-    list.forEach(o => this.viewOutfit(o.id));
+    if (list.length === 1) {
+      this.viewOutfit(list[0].id);
+      return;
+    }
+    const listHtml = list.map(o => {
+      const items = o.itemIds.map(iid => wardrobeModule.items.find(i => i.id === iid)).filter(Boolean);
+      const itemNames = items.slice(0, 3).map(i => i.name).join('、');
+      const ratingStars = o.rating ? `<span style="color:#f0c040;font-size:12px;">${'★'.repeat(o.rating)}${'☆'.repeat(5 - o.rating)}</span>` : '';
+      return `<div class="day-outfit-item" onclick="Utils.closeModal();outfitModule.viewOutfit(${o.id})" style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg-soft);border-radius:12px;cursor:pointer;margin-bottom:8px;">
+        <div style="width:48px;height:48px;border-radius:8px;background:var(--bg-card);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+          ${items[0]?.photo ? `<img src="${items[0].photo}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">` : '👗'}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${itemNames || '穿搭记录'}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+            ${o.weather?.icon || ''} ${o.weather?.temp || ''}°C ${ratingStars}
+            ${o.scenes?.slice(0,1).map(s => `<span style="padding:1px 6px;background:var(--secondary-light);color:#8a6a99;border-radius:8px;font-size:10px;">${s}</span>`).join('')}
+          </div>
+        </div>
+        <div style="color:var(--text-muted);font-size:14px;">›</div>
+      </div>`;
+    }).join('');
+    Utils.showModal(`
+      <div class="modal-header">
+        <div class="modal-title">${date} 的穿搭（${list.length}条）</div>
+        <button class="modal-close" onclick="Utils.closeModal()">✕</button>
+      </div>
+      ${listHtml}
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn-ghost btn-block btn-md" onclick="Utils.closeModal();outfitModule.showOutfitModal(null,'${date}')">+ 再加一条</button>
+      </div>
+    `);
   },
 
   showOutfitModal(editId = null, presetDate = null) {
@@ -290,15 +321,18 @@ const outfitModule = {
     return img ? img.src : '';
   },
 
-  async _updateWearCounts(oldIds, newIds, date) {
+  async _updateWearCounts(oldIds, newIds, oldDate, newDate) {
+    const dateChanged = oldDate && newDate && oldDate !== newDate;
     const removed = (oldIds || []).filter(id => !newIds.includes(id));
     const added = newIds.filter(id => !(oldIds || []).includes(id));
+    const kept = (oldIds || []).filter(id => newIds.includes(id));
+
     for (const id of removed) {
       const it = wardrobeModule.items.find(i => i.id === id);
       if (!it) continue;
       it.wearCount = Math.max(0, (it.wearCount || 0) - 1);
-      it.wornDates = (it.wornDates || []).filter(d => d !== date);
-      if (it.lastWorn === date) {
+      it.wornDates = (it.wornDates || []).filter(d => d !== oldDate);
+      if (it.lastWorn === oldDate) {
         it.lastWorn = it.wornDates.length ? [...it.wornDates].sort().pop() : null;
       }
       await DB.put('clothes', it);
@@ -307,9 +341,24 @@ const outfitModule = {
       const it = wardrobeModule.items.find(i => i.id === id);
       if (!it) continue;
       it.wearCount = (it.wearCount || 0) + 1;
-      it.wornDates = [...new Set([...(it.wornDates || []), date])];
-      if (!it.lastWorn || date > it.lastWorn) it.lastWorn = date;
+      it.wornDates = [...new Set([...(it.wornDates || []), newDate])];
+      if (!it.lastWorn || newDate > it.lastWorn) it.lastWorn = newDate;
       await DB.put('clothes', it);
+    }
+    if (dateChanged) {
+      for (const id of kept) {
+        const it = wardrobeModule.items.find(i => i.id === id);
+        if (!it) continue;
+        const dates = (it.wornDates || []).filter(d => d !== oldDate);
+        dates.push(newDate);
+        it.wornDates = [...new Set(dates)];
+        if (it.lastWorn === oldDate) {
+          it.lastWorn = it.wornDates.length ? [...it.wornDates].sort().pop() : null;
+        } else if (newDate > (it.lastWorn || '')) {
+          it.lastWorn = newDate;
+        }
+        await DB.put('clothes', it);
+      }
     }
   },
 
@@ -352,12 +401,12 @@ const outfitModule = {
 
     const old = editId ? this.outfits.find(o => o.id === editId) : null;
     if (editId) {
-      await this._updateWearCounts(old.itemIds, data.itemIds, date);
+      await this._updateWearCounts(old.itemIds, data.itemIds, old.date, date);
       await DB.put('outfits', { ...old, ...data });
       Utils.toast('穿搭已更新');
     } else {
       await DB.add('outfits', { ...data, createdAt: Utils.todayStr() });
-      await this._updateWearCounts([], data.itemIds, date);
+      await this._updateWearCounts([], data.itemIds, null, date);
       Utils.toast('穿搭已保存');
     }
     Utils.closeModal();
@@ -368,7 +417,7 @@ const outfitModule = {
   async deleteOutfit(id) {
     if (!confirm('确定删除此穿搭记录？衣物穿着次数将同步更新')) return;
     const of = this.outfits.find(o => o.id === id);
-    if (of) await this._updateWearCounts(of.itemIds, [], of.date);
+    if (of) await this._updateWearCounts(of.itemIds, [], of.date, null);
     await DB.remove('outfits', id);
     Utils.toast('已删除');
     Utils.closeModal();
